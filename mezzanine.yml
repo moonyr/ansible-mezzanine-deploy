@@ -4,7 +4,7 @@
 
   vars:
     user: "{{ ansible_user }}"
-    proj_app: 'mezzanine_exemple'
+    proj_app: 'mezzanine_example'
     proj_name: "{{ proj_app }}"
     venv_home: "{{ ansible_env.HOME }}/.virtualenvs"
     venv_path: "{{ venv_home }}/{{ proj_name }}"
@@ -16,8 +16,8 @@
     domains:
       - 192.168.122.42.nip.io
       - www.192.168.122.42.nip.io
-    # repo_url: 'git@github.com:ansiblebook/mezzanine_exemple.git'
-    repo_url: 'https://github.com/ansiblebook/mezzanine_exemple.git'
+    # repo_url: 'git@github.com:ansiblebook/mezzanine_example.git'
+    repo_url: 'https://github.com/ansiblebook/mezzanine_example.git'
     locale: 'en_US.UTF-8'
     conf_path: /etc/nginx/conf
     tls_enabled: true
@@ -64,7 +64,7 @@
         state: directory
         mode: '0755'
 
-    - name: Download mezzanine_exemple archive
+    - name: Download mezzanine_example archive
       ansible.builtin.get_url:
         url: >
           https://github.com/ansiblebook/mezzanine_example/archive/refs/heads/master.tar.gz
@@ -79,14 +79,17 @@
         extra_opts: [--strip-components=1]
 
     - name: Create python3 virtualenv
+      ansible.builtin.command: python3 -m venv {{ venv_path }}
+      args:
+        creates: "{{ venv_path }}"
+
+    - name: Upgrade pip, whell, and setuptools in virtualenv
       ansible.builtin.pip:
+        virtualenv: "{{ venv_path }}"
         name:
           - pip
           - wheel
           - setuptools
-        state: present
-        virtualenv: "{{ venv_path }}"
-        virtualenv_command: /usr/bin/python3 -m venv
 
     - name: Copy requirements.txt to home directory
       ansible.builtin.copy:
@@ -159,7 +162,7 @@
       become: true
       ansible.builtin.file:
         src: /etc/nginx/sites-available/mezzanine.conf
-        dest: /etc/nginx/site-enabled/mezzanine.conf
+        dest: /etc/nginx/sites-enabled/mezzanine.conf
         state: link
       notify: Restart nginx
 
@@ -184,27 +187,32 @@
         dest: "{{ proj_path }}/gunicorn.conf.py"
         mode: '0750'
 
+    - name: Ensure the settings directory exists
+      ansible.builtin.file:
+        path: "{{ settings_path }}"
+        state: directory
+        mode: '0750'
+    
     - name: Generate the settings file
       ansible.builtin.template:
         src: templates/local_settings.py.j2
         dest: "{{ settings_path }}/local_settings.py"
         mode: '0750'
 
-    - name: Apply migrations to create the database, collect static content
-      community.general.django_manage:
-        command: "{{ item }}"
-        app_path: "{{ proj_path }}"
-        virtualenv: "{{ venv_path }}"
-      with_items:
-        - migrate
-        - collectstatic
+    - name: Simulate application
+      ansible.builtin.debug:
+        msg: "Installing my demo app... (simulated)"
 
-    - name: Set the site id
-      ansible.builtin.script: scripts/setsite.py
-      environment:
-        PATH: "{{ venv_path }}/bin"
-        PROJECT_DIR: "{{ proj_path }}"
-        PROJECT_APP: "{{ proj_app }}"
-        DJANGO_SETTINGS_MODULE: "{{ proj_app }}.settings"
-        WEBSITE_DOMAIN: "{{ live_hostname }}"
+  handlers:
+    - name: Restart supervisor
+      become: true
+      community.general.supervisorctl:
+        name: "{{ gunicorn_procname }}"
+        state: restarted
+
+    - name: Restart nginx
+      become: true
+      ansible.builtin.service:
+        name: nginx
+        state: restarted
 ...
